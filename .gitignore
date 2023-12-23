@@ -1,0 +1,4 @@
+# Igonre all builder folders
+build/
+*/build/
+.vscode/
