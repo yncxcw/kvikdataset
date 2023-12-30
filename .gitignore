@@ -1,4 +1,6 @@
 # Igonre all builder folders
 build/
 */build/
+
+# Ignore vscode
 .vscode/
