@@ -3,6 +3,7 @@
 #include <buffer.hpp>
 #include <iostream>
 #include <kvikio/kvikio.hpp>
+#include <tar_reader.hpp>
 
 int main()
 {

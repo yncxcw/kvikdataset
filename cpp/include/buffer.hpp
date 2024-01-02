@@ -11,11 +11,13 @@
 namespace kvikdataset {
 
 class Allocator {
+ public:
   virtual bool malloc(void** ptr, const size_t size) const = 0;
   virtual void free(void* ptr) const                       = 0;
 };
 
 class CPUAllocator : public Allocator {
+ public:
   bool malloc(void** ptr, const size_t size) const
   {
     *ptr = std::malloc(size);
@@ -26,6 +28,7 @@ class CPUAllocator : public Allocator {
 };
 
 class GPUAllocator : public Allocator {
+ public:
   bool malloc(void** ptr, const size_t size) const { return cudaMalloc(ptr, size) == cudaSuccess; }
 
   void free(void* ptr) const { cudaFree(ptr); }
