@@ -13,7 +13,7 @@ project(
 set(CMAKE_CUDA_COMPILER "/usr/local/cuda-11.7/nvcc")
 
 add_library(
-    tario_lib INTERFACE 
+   kvikdataset_lib  INTERFACE 
 )
 
 # Defines the linking libraries
@@ -36,12 +36,14 @@ else()
     message(FATAL_ERROR "CUDA Toolkit not found.")
 endif()
 
-target_include_directories(tario_lib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(tario_lib INTERFACE Threads::Threads)
-target_link_libraries(tario_lib INTERFACE CUDA::toolkit)
-target_link_libraries(tario_lib INTERFACE CUDA::cuFile)
-target_compile_features(tario_lib INTERFACE cxx_std_17)
-    
+target_include_directories(kvikdataset_lib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(kvikdataset_lib INTERFACE Threads::Threads)
+target_link_libraries(kvikdataset_lib INTERFACE CUDA::toolkit)
+target_link_libraries(kvikdataset_lib INTERFACE CUDA::cuFile)
+target_link_libraries(kvikdataset_lib INTERFACE CUDA::cudart)
+target_compile_features(kvikdataset_lib INTERFACE cxx_std_17)
 
 add_executable(main main.cpp)
-target_link_libraries(main PRIVATE tario_lib)
+target_link_libraries(main PRIVATE kvikdataset_lib)
+
+add_subdirectory(test)

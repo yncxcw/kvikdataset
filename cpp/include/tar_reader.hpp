@@ -90,7 +90,7 @@ class TarReader {
     } else if (name.substr(name.size() - 4) == "_gpu") {
       device = ArchiveDevice::GPU;
     } else {
-      throw std::runtime_error("Invalid archive name");
+      throw std::runtime_error("Invalid archive name " + name);
     }
     return TarArchive(name, size, device);
   }
