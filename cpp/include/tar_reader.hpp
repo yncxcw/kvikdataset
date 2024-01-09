@@ -12,6 +12,11 @@
 
 namespace kvikdataset {
 
+// The size of each archive block, each archive is consists of multiple blocks
+static constexpr const long int TAR_ARCHIVE_BLOCK_SIZE = 512;
+static constexpr const long int TAR_ARCHIVE_HEAD_SIZE  = 512;
+
+// Mapping from fields of header to a tuple of offset and length of this field
 static const std::unordered_map<std::string, std::tuple<size_t, size_t>> TarMetadata = {
   {"name", std::make_tuple(0, 100)},
   {"size", std::make_tuple(124, 12)},
@@ -53,19 +58,34 @@ class TarReader {
   {
     // We only read the header to decode the archive.
     std::ifstream fin(file_path, std::ios_base::in | std::ios_base::binary);
-    std::array<char, 512> header;
+    std::array<char, TAR_ARCHIVE_HEAD_SIZE> header;
+    static const std::array<char, TAR_ARCHIVE_HEAD_SIZE> null_buffer{};
 
     if (!fin.is_open()) { throw std::runtime_error("file " + file_path + " can't be open."); }
 
     while (fin) {
-      fin.read(header.data(), 512);
-      if (std::size(header) != 512) {
+      fin.read(header.data(), TAR_ARCHIVE_HEAD_SIZE);
+      if (std::size(header) != TAR_ARCHIVE_HEAD_SIZE) {
         throw std::runtime_error("file " + file_path + " head read is failed.");
       }
+
+      // At the end of the tar file there is 2 x TAR_ARCHIVE_HDEA_SIZE empty buffer
+      if (header == null_buffer) {
+        fin.read(header.data(), TAR_ARCHIVE_HEAD_SIZE);
+        if (header == null_buffer) {
+          break;
+        } else {
+          throw std::runtime_error("file " + file_path + " invalid training part.");
+        }
+      }
+
       // Decoder header and populate the archives.
       const auto archive = decoder_header(header);
       archives.emplace(std::make_pair(archive.name, archive));
-      long int offset = static_cast<long int>(archive.size + 512);
+      // offset must be multiple blocks of TAR_ARCHIVE_BLOCK_SIZE
+      long int offset = static_cast<long int>(
+        archive.size +
+        (TAR_ARCHIVE_BLOCK_SIZE - archive.size % TAR_ARCHIVE_BLOCK_SIZE) % TAR_ARCHIVE_BLOCK_SIZE);
       fin.seekg(fin.tellg() + offset);
     }
   }
@@ -79,10 +99,10 @@ class TarReader {
   void read() {}
 
  private:
-  TarArchive decoder_header(const std::array<char, 512>& header)
+  TarArchive decoder_header(const std::array<char, TAR_ARCHIVE_HEAD_SIZE>& header)
   {
     const auto name = retrive_header_field(header, "name");
-    const auto size = std::stoi(retrive_header_field(header, "size"));
+    const auto size = std::stoi(retrive_header_field(header, "size"), nullptr, 8);
 
     ArchiveDevice device;
     if (name.substr(name.size() - 4) == "_cpu") {
@@ -92,15 +112,18 @@ class TarReader {
     } else {
       throw std::runtime_error("Invalid archive name " + name);
     }
+
     return TarArchive(name, size, device);
   }
 
-  const std::string retrive_header_field(const std::array<char, 512> header,
+  const std::string retrive_header_field(const std::array<char, TAR_ARCHIVE_HEAD_SIZE> header,
                                          const std::string& field) const
   {
     const auto& offset = std::get<0>(TarMetadata.at(field));
     const auto& len    = std::get<1>(TarMetadata.at(field));
-    return std::string(header.begin() + offset, header.begin() + offset + len);
+    std::string str(header.begin() + offset, header.begin() + offset + len);
+    str.erase(str.find_first_of('\0'), std::string::npos);
+    return str;
   }
 
   std::string file_path;

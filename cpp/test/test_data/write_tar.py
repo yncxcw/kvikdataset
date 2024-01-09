@@ -2,14 +2,17 @@ import io
 import os
 import tarfile
 
-tarstream = tarfile.open("test.tar", mode="w")
 
-for i in range(1, 4):
-    size = 100 * i
+def write_archive(tarsteam, size: int, name: str):
     random_bytes=io.BytesIO(os.urandom(size))
-    ti = tarfile.TarInfo(f"field-{i}")
+    ti = tarfile.TarInfo(name)
     ti.size = size
     ti.uname = "wei"
     tarstream.addfile(ti, random_bytes)
 
-tarstream.close()
+if __name__ == "__main__":
+    tarstream = tarfile.open("test.tar", mode="w")
+    write_archive(tarstream, 16, "foo_cpu")
+    write_archive(tarstream, 200, "boo_gpu")
+    write_archive(tarstream, 300, "poo_gpu")
+    tarstream.close()
