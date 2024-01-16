@@ -26,30 +26,39 @@ static const std::unordered_map<std::string, std::tuple<size_t, size_t>> TarMeta
 // Device to place the content of each archive.
 enum class ArchiveDevice { CPU, GPU };
 
-struct TarArchive {
-  // Name of the archive.
-  std::string name;
-  // The size of the archive.
-  size_t size;
-  // Deice to place the content of the archive
-  ArchiveDevice device;
-  // Buffer for hosting the data on GPU.
-  std::unique_ptr<GPUBuffer<char>> gpu_buffer;
-  // Buffer for hosting the data on CPU.
-  std::unique_ptr<CPUBuffer<char>> cpu_buffer;
-
+class TarArchive {
+ public:
+  TarArchive() {}
   TarArchive(const std::string& name, const size_t& size, const ArchiveDevice& device)
-    : name(name), size(size), device(device)
+    : _name(name), _size(size), _device(device)
   {
   }
 
   TarArchive(const TarArchive& archive)
-    : name(archive.name), size(archive.size), device(archive.device)
+    : _name(archive._name), _size(archive._size), _device(archive._device)
   {
-    if (gpu_buffer != nullptr or cpu_buffer != nullptr) {
+    if (_gpu_buffer != nullptr or _cpu_buffer != nullptr) {
       throw std::runtime_error("Copying TarArchive with cpu/gpu buffer.");
     }
   }
+
+  std::string name() const { return _name; }
+
+  size_t size() const { return _size; }
+
+  ArchiveDevice device() const { return _device; }
+
+ private:
+  // Name of the archive.
+  std::string _name;
+  // The size of the archive.
+  size_t _size;
+  // Deice to place the content of the archive
+  ArchiveDevice _device;
+  // Buffer for hosting the data on GPU.
+  std::unique_ptr<GPUBuffer<char>> _gpu_buffer;
+  // Buffer for hosting the data on CPU.
+  std::unique_ptr<CPUBuffer<char>> _cpu_buffer;
 };
 
 class TarReader {
@@ -81,11 +90,11 @@ class TarReader {
 
       // Decoder header and populate the archives.
       const auto archive = decoder_header(header);
-      archives.emplace(std::make_pair(archive.name, archive));
+      archives.emplace(std::make_pair(archive.name(), archive));
       // offset must be multiple blocks of TAR_ARCHIVE_BLOCK_SIZE
       long int offset = static_cast<long int>(
-        archive.size +
-        (TAR_ARCHIVE_BLOCK_SIZE - archive.size % TAR_ARCHIVE_BLOCK_SIZE) % TAR_ARCHIVE_BLOCK_SIZE);
+        archive.size() + (TAR_ARCHIVE_BLOCK_SIZE - archive.size() % TAR_ARCHIVE_BLOCK_SIZE) %
+                           TAR_ARCHIVE_BLOCK_SIZE);
       fin.seekg(fin.tellg() + offset);
     }
   }
@@ -97,6 +106,8 @@ class TarReader {
   TarReader& operator=(TarReader& tar_reader) = delete;
 
   void read() {}
+
+  std::unordered_map<std::string, TarArchive> read_archives() const { return archives; }
 
  private:
   TarArchive decoder_header(const std::array<char, TAR_ARCHIVE_HEAD_SIZE>& header)
@@ -116,8 +127,8 @@ class TarReader {
     return TarArchive(name, size, device);
   }
 
-  const std::string retrive_header_field(const std::array<char, TAR_ARCHIVE_HEAD_SIZE> header,
-                                         const std::string& field) const
+  std::string retrive_header_field(const std::array<char, TAR_ARCHIVE_HEAD_SIZE> header,
+                                   const std::string& field) const
   {
     const auto& offset = std::get<0>(TarMetadata.at(field));
     const auto& len    = std::get<1>(TarMetadata.at(field));
