@@ -7,6 +7,7 @@
 
 #include <buffer.hpp>
 #include <fstream>
+#include <kvikio/kvikio.hpp>
 #include <string>
 #include <unordered_map>
 
@@ -29,36 +30,76 @@ enum class ArchiveDevice { CPU, GPU };
 class TarArchive {
  public:
   TarArchive() {}
-  TarArchive(const std::string& name, const size_t& size, const ArchiveDevice& device)
-    : _name(name), _size(size), _device(device)
+  TarArchive(const std::string& name,
+             const size_t& size,
+             const size_t& offset,
+             const ArchiveDevice& device)
+    : _name(name), _size(size), _offset(offset), _device(device)
   {
+    if (_device == ArchiveDevice::CPU)
+      _cpu_buffer = std::make_unique<CPUBuffer<char>>(size);
+    else
+      _gpu_buffer = std::make_unique<GPUBuffer<char>>(size);
   }
 
   TarArchive(const TarArchive& archive)
-    : _name(archive._name), _size(archive._size), _device(archive._device)
+    : _name(archive._name), _size(archive._size), _offset(archive._offset), _device(archive._device)
   {
     if (_gpu_buffer != nullptr or _cpu_buffer != nullptr) {
       throw std::runtime_error("Copying TarArchive with cpu/gpu buffer.");
     }
+    if (_device == ArchiveDevice::CPU)
+      _cpu_buffer = std::make_unique<CPUBuffer<char>>(_size);
+    else
+      _gpu_buffer = std::make_unique<GPUBuffer<char>>(_size);
   }
 
+  TarArchive(TarArchive&& archive)
+    : _name(archive._name), _size(archive._size), _offset(archive._offset), _device(archive._device)
+  {
+    if (archive._cpu_buffer != nullptr) {
+      _cpu_buffer         = std::move(archive._cpu_buffer);
+      archive._cpu_buffer = nullptr;
+    }
+
+    if (archive._gpu_buffer != nullptr) {
+      _gpu_buffer         = std::move(archive._gpu_buffer);
+      archive._gpu_buffer = nullptr;
+    }
+  }
+
+  ~TarArchive() {}
   std::string name() const { return _name; }
 
   size_t size() const { return _size; }
 
+  size_t offset() const { return _offset; }
+
+  bool is_read() const { return _is_read; }
+
   ArchiveDevice device() const { return _device; }
+
+  void set_read() { _is_read = true; }
+
+  std::unique_ptr<GPUBuffer<char>>& gpu_buffer() { return _gpu_buffer; }
+
+  std::unique_ptr<CPUBuffer<char>>& cpu_buffer() { return _cpu_buffer; }
 
  private:
   // Name of the archive.
   std::string _name;
   // The size of the archive.
   size_t _size;
+  // The offset of the this archive in the file.
+  size_t _offset;
   // Deice to place the content of the archive
   ArchiveDevice _device;
+  // If the archive has been read.
+  bool _is_read{false};
   // Buffer for hosting the data on GPU.
-  std::unique_ptr<GPUBuffer<char>> _gpu_buffer;
+  std::unique_ptr<GPUBuffer<char>> _gpu_buffer{nullptr};
   // Buffer for hosting the data on CPU.
-  std::unique_ptr<CPUBuffer<char>> _cpu_buffer;
+  std::unique_ptr<CPUBuffer<char>> _cpu_buffer{nullptr};
 };
 
 class TarReader {
@@ -72,6 +113,7 @@ class TarReader {
 
     if (!fin.is_open()) { throw std::runtime_error("file " + file_path + " can't be open."); }
 
+    size_t current_offset = 0;
     while (fin) {
       fin.read(header.data(), TAR_ARCHIVE_HEAD_SIZE);
       if (std::size(header) != TAR_ARCHIVE_HEAD_SIZE) {
@@ -88,29 +130,64 @@ class TarReader {
         }
       }
 
+      current_offset += TAR_ARCHIVE_HEAD_SIZE;
       // Decoder header and populate the archives.
-      const auto archive = decoder_header(header);
-      archives.emplace(std::make_pair(archive.name(), archive));
+      TarArchive archive{decoder_header(header, current_offset)};
+      // Note: With emplace(), you can inter map with rvalue.
+      // This moves the unique_ptr of cpu/gpu buffer to archives, which avoids an
+      // extra memory copy.
+      archives.emplace(std::make_pair(archive.name(), std::move(archive)));
       // offset must be multiple blocks of TAR_ARCHIVE_BLOCK_SIZE
       long int offset = static_cast<long int>(
         archive.size() + (TAR_ARCHIVE_BLOCK_SIZE - archive.size() % TAR_ARCHIVE_BLOCK_SIZE) %
                            TAR_ARCHIVE_BLOCK_SIZE);
       fin.seekg(fin.tellg() + offset);
+      current_offset += offset;
     }
   }
 
+  ~TarReader() { std::cout << "free Tar" << std::endl; }
   TarReader(const TarReader& tar_reader) = delete;
 
   TarReader(TarReader&& tar_reader) = delete;
 
   TarReader& operator=(TarReader& tar_reader) = delete;
 
-  void read() {}
+  bool read()
+  {
+    kvikio::FileHandle f(file_path, "r");
+    for (auto& archive : archives) {
+      if (archive.second.device() == ArchiveDevice::CPU) {
+        f.pread(
+          // Address to device or host memory.
+          archive.second.cpu_buffer()->data(),
+          // Size of bytes to load.
+          archive.second.size(),
+          // Offset in the file to read from.
+          archive.second.offset());
+        archive.second.set_read();
+      } else if (archive.second.device() == ArchiveDevice::GPU) {
+        f.pread(
+          // Address to device or host memory.
+          archive.second.gpu_buffer()->data(),
+          // Size of bytes to load.
+          archive.second.size(),
+          // Offset in the file to read from.
+          archive.second.offset());
+        archive.second.set_read();
+      } else {
+        throw std::runtime_error("Device not supported");
+      }
+    }
 
-  std::unordered_map<std::string, TarArchive> read_archives() const { return archives; }
+    return true;
+  }
+
+  std::unordered_map<std::string, TarArchive>& read_archives() { return archives; }
 
  private:
-  TarArchive decoder_header(const std::array<char, TAR_ARCHIVE_HEAD_SIZE>& header)
+  TarArchive decoder_header(const std::array<char, TAR_ARCHIVE_HEAD_SIZE>& header,
+                            const size_t& offset)
   {
     const auto name = retrive_header_field(header, "name");
     const auto size = std::stoi(retrive_header_field(header, "size"), nullptr, 8);
@@ -124,10 +201,10 @@ class TarReader {
       throw std::runtime_error("Invalid archive name " + name);
     }
 
-    return TarArchive(name, size, device);
+    return TarArchive(name, size, offset, device);
   }
 
-  std::string retrive_header_field(const std::array<char, TAR_ARCHIVE_HEAD_SIZE> header,
+  std::string retrive_header_field(const std::array<char, TAR_ARCHIVE_HEAD_SIZE>& header,
                                    const std::string& field) const
   {
     const auto& offset = std::get<0>(TarMetadata.at(field));

@@ -41,6 +41,8 @@ target_link_libraries(kvikdataset_lib INTERFACE Threads::Threads)
 target_link_libraries(kvikdataset_lib INTERFACE CUDA::toolkit)
 target_link_libraries(kvikdataset_lib INTERFACE CUDA::cuFile)
 target_link_libraries(kvikdataset_lib INTERFACE CUDA::cudart)
+target_link_libraries(kvikdataset_lib INTERFACE dl)
+target_link_libraries(kvikdataset_lib INTERFACE stdc++fs)
 target_compile_features(kvikdataset_lib INTERFACE cxx_std_17)
 
 add_executable(main main.cpp)
