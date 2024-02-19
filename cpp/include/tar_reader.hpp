@@ -45,9 +45,10 @@ class TarArchive {
   TarArchive(const TarArchive& archive)
     : _name(archive._name), _size(archive._size), _offset(archive._offset), _device(archive._device)
   {
-    if (_gpu_buffer != nullptr or _cpu_buffer != nullptr) {
-      throw std::runtime_error("Copying TarArchive with cpu/gpu buffer.");
-    }
+    if (_device == ArchiveDevice::CPU)
+      if (_gpu_buffer != nullptr or _cpu_buffer != nullptr) {
+        throw std::runtime_error("Copying TarArchive with cpu/gpu buffer.");
+      }
     if (_device == ArchiveDevice::CPU)
       _cpu_buffer = std::make_unique<CPUBuffer<char>>(_size);
     else
@@ -136,6 +137,7 @@ class TarReader {
       // Note: With emplace(), you can inter map with rvalue.
       // This moves the unique_ptr of cpu/gpu buffer to archives, which avoids an
       // extra memory copy.
+
       archives.emplace(std::make_pair(archive.name(), std::move(archive)));
       // offset must be multiple blocks of TAR_ARCHIVE_BLOCK_SIZE
       long int offset = static_cast<long int>(
@@ -146,7 +148,7 @@ class TarReader {
     }
   }
 
-  ~TarReader() { std::cout << "free Tar" << std::endl; }
+  ~TarReader() {}
   TarReader(const TarReader& tar_reader) = delete;
 
   TarReader(TarReader&& tar_reader) = delete;

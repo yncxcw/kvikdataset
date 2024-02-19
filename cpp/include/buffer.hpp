@@ -29,7 +29,7 @@ class CPUAllocator : public Allocator {
 
   void free(void* ptr) const
   {
-    if (ptr != nullptr) free(ptr);
+    if (ptr != nullptr) std::free(ptr);
   }
 
   std::string type() const { return "cpu"; }
@@ -61,7 +61,6 @@ class Buffer {
 
   Buffer(size_t size)
   {
-    std::cout << "buffer construct" << std::endl;
     _size = size;
     if (!allocator.malloc((void**)(&_buffer), sizeof(T) * _size)) { throw std::bad_alloc(); }
     if (_buffer == nullptr) { throw std::bad_alloc(); }
@@ -69,7 +68,6 @@ class Buffer {
 
   Buffer(Buffer&& buffer) : _size(buffer._size), _buffer(buffer._buffer)
   {
-    std::cout << "buffer move" << std::endl;
     buffer._buffer = nullptr;
     buffer._size   = 0;
   }
@@ -80,11 +78,9 @@ class Buffer {
 
   ~Buffer()
   {
-    std::cout << "buffer free " << std::endl;
-    allocator.free((void**)(_buffer));
+    allocator.free((void*)(_buffer));
     _size   = 0;
     _buffer = nullptr;
-    std::cout << "Done buffer free " << std::endl;
   }
 
   bool empty() const { return _buffer == nullptr; }
