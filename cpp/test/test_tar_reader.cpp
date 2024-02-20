@@ -43,17 +43,17 @@ TEST(TarReaderTest, TarReaderConstruction)
   auto& archives = reader.read_archives();
   {
     EXPECT_EQ(archives["foo_cpu"].name(), "foo_cpu");
-    EXPECT_EQ(archives["foo_cpu"].size(), 100);
+    EXPECT_EQ(archives["foo_cpu"].size(), 10);
     EXPECT_EQ(archives["foo_cpu"].device(), ArchiveDevice::CPU);
   }
   {
     EXPECT_EQ(archives["boo_gpu"].name(), "boo_gpu");
-    EXPECT_EQ(archives["boo_gpu"].size(), 200);
+    EXPECT_EQ(archives["boo_gpu"].size(), 10);
     EXPECT_EQ(archives["boo_gpu"].device(), ArchiveDevice::GPU);
   }
   {
     EXPECT_EQ(archives["poo_gpu"].name(), "poo_gpu");
-    EXPECT_EQ(archives["poo_gpu"].size(), 300);
+    EXPECT_EQ(archives["poo_gpu"].size(), 10);
     EXPECT_EQ(archives["poo_gpu"].device(), ArchiveDevice::GPU);
   }
   {
@@ -76,12 +76,14 @@ TEST(TarReaderTest, TarReaderRead)
 
     if (archive.first == "boo_gpu") {
       EXPECT_TRUE(archive.second.device() == ArchiveDevice::GPU);
-      _buffer_compare_gpu<uint8_t>(archive.second.gpu_buffer()->data(), archive.second.size(), 4);
+      _buffer_compare_gpu<uint8_t>(
+        archive.second.gpu_buffer()->data(), archive.second.size(), static_cast<uint8_t>(4));
     }
 
-    if (archive.first == "foo_cpu") {
+    if (archive.first == "poo_gpu") {
       EXPECT_TRUE(archive.second.device() == ArchiveDevice::GPU);
-      _buffer_compare_gpu<uint8_t>(archive.second.gpu_buffer()->data(), archive.second.size(), 6);
+      _buffer_compare_gpu<uint8_t>(
+        archive.second.gpu_buffer()->data(), archive.second.size(), static_cast<uint8_t>(6));
     }
   }
 }

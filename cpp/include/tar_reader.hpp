@@ -131,6 +131,7 @@ class TarReader {
         }
       }
 
+      // The header of the current tar archive.
       current_offset += TAR_ARCHIVE_HEAD_SIZE;
       // Decoder header and populate the archives.
       TarArchive archive{decoder_header(header, current_offset)};
@@ -158,30 +159,39 @@ class TarReader {
   bool read()
   {
     kvikio::FileHandle f(file_path, "r");
+    // the future size and expected size pair.
+    std::vector<std::pair<std::future<std::size_t>, std::size_t>> futures;
     for (auto& archive : archives) {
       if (archive.second.device() == ArchiveDevice::CPU) {
-        f.pread(
-          // Address to device or host memory.
-          archive.second.cpu_buffer()->data(),
-          // Size of bytes to load.
-          archive.second.size(),
-          // Offset in the file to read from.
-          archive.second.offset());
+        futures.push_back(std::make_pair(f.pread(
+                                           // Address to device or host memory.
+                                           archive.second.cpu_buffer()->data(),
+                                           // Size of bytes to load.
+                                           archive.second.size(),
+                                           // Offset in the file to read from.
+                                           archive.second.offset()),
+                                         archive.second.size()));
         archive.second.set_read();
       } else if (archive.second.device() == ArchiveDevice::GPU) {
-        f.pread(
-          // Address to device or host memory.
-          archive.second.gpu_buffer()->data(),
-          // Size of bytes to load.
-          archive.second.size(),
-          // Offset in the file to read from.
-          archive.second.offset());
+        futures.push_back(std::make_pair(f.pread(
+                                           // Address to device or host memory.
+                                           archive.second.gpu_buffer()->data(),
+                                           // Size of bytes to load.
+                                           archive.second.size(),
+                                           // Offset in the file to read from.
+                                           archive.second.offset()),
+                                         archive.second.size()));
         archive.second.set_read();
       } else {
         throw std::runtime_error("Device not supported");
       }
     }
 
+    // Sync on all reads.
+    for (auto& future : futures) {
+      // Return false, if it false to read one archive.
+      if (future.first.get() != future.second) { return false; }
+    }
     return true;
   }
 

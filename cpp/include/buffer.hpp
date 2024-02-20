@@ -6,8 +6,10 @@
 #pragma once
 
 #include <cuda_runtime_api.h>
+#include <cstring>
 #include <iostream>
 #include <memory>
+#include <type_traits>
 
 namespace kvikdataset {
 
@@ -24,6 +26,7 @@ class CPUAllocator : public Allocator {
   {
     if (*ptr != nullptr) { throw std::runtime_error("malloc on non-nullptr."); }
     *ptr = std::malloc(size);
+    std::memset(*ptr, 0, size);
     return *ptr != nullptr;
   }
 
@@ -81,6 +84,16 @@ class Buffer {
     allocator.free((void*)(_buffer));
     _size   = 0;
     _buffer = nullptr;
+  }
+
+  // For debugging purpose
+  void print() const
+  {
+    if (std::is_same<MemAllocator, CPUAllocator>::value) {
+      for (size_t i = 0; i < _size; i++) {
+        std::cout << _buffer[i] - 0 << std::endl;
+      }
+    }
   }
 
   bool empty() const { return _buffer == nullptr; }
