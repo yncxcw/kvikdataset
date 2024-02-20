@@ -43,5 +43,5 @@ The following exampels shows how to laod tar file with kvikdataset.
 
  }
 ```
-## Python(Pytorch) buding
+## Python(Pytorch) binding
 TODO
